@@ -1,17 +1,14 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
-from dotenv import load_dotenv
-import os
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-env_path = os.path.join(BASE_DIR, ".env")
+DATABASE_URL = "sqlite:///./cab.db"
 
-load_dotenv(env_path)
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={"check_same_thread": False}
+)
 
-DATABASE_URL = os.getenv("DATABASE_URL")
-print("Loaded DB URL:", DATABASE_URL)
-
-engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
-
 Base = declarative_base()
+
+print("✅ Using SQLite local database")
