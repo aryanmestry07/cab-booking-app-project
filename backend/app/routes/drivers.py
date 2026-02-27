@@ -44,3 +44,17 @@ def toggle_availability(driver_id: str, is_available: bool, db: Session = Depend
         "driver_id": driver.id,
         "is_available": driver.is_available
     }
+
+# ---------------- 📋 Get All Drivers ----------------
+@router.get("/")
+def get_all_drivers(db: Session = Depends(get_db)):
+    drivers = db.query(Driver).all()
+
+    return [
+        {
+            "driver_id": driver.id,
+            "name": driver.name,
+            "is_available": driver.is_available
+        }
+        for driver in drivers
+    ]

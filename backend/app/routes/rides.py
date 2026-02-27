@@ -98,3 +98,20 @@ def complete_ride(ride_id: UUID, db: Session = Depends(get_db)):
         "ride_id": str(ride.id),
         "status": ride.status
     }
+
+
+# ---------------- 📜 Get All Rides ----------------
+@router.get("/")
+def get_all_rides(db: Session = Depends(get_db)):
+    rides = db.query(Ride).all()
+
+    return [
+        {
+            "ride_id": str(ride.id),
+            "rider_id": ride.rider_id,
+            "status": ride.status,
+            "fare_estimate": ride.fare_estimate,
+            "driver_id": ride.driver_id
+        }
+        for ride in rides
+    ]
