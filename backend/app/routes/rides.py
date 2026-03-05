@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from uuid import UUID
 from datetime import datetime
+from sqlalchemy import func
 
 from app.database import SessionLocal
-from app.models import Ride, Driver, User
+from app.models import Ride, Driver, User, RideStatus
 from app.auth import get_current_user
 
 router = APIRouter()
@@ -20,12 +20,14 @@ def get_db():
         db.close()
 
 
-# ---------------- Pydantic Schema ----------------
+# ---------------- Request Schema ----------------
 class RideRequest(BaseModel):
     fare_estimate: float
 
 
-# ---------------- 🚖 Request Ride (RIDER ONLY) ----------------
+# =====================================================
+# 🚖 REQUEST RIDE
+# =====================================================
 @router.post("/request")
 def request_ride(
     data: RideRequest,
@@ -36,16 +38,30 @@ def request_ride(
     if current_user.role != "rider":
         raise HTTPException(status_code=403, detail="Only riders can request rides")
 
+    # Prevent multiple active rides
+    existing_ride = db.query(Ride).filter(
+        Ride.rider_id == current_user.id,
+        Ride.status.in_([
+            RideStatus.requested,
+            RideStatus.assigned,
+            RideStatus.ongoing
+        ])
+    ).first()
+
+    if existing_ride:
+        raise HTTPException(status_code=400, detail="You already have an active ride")
+
+    # Find available driver
     driver = db.query(Driver).filter(Driver.is_available == True).first()
 
     if not driver:
         raise HTTPException(status_code=404, detail="No drivers available")
 
     ride = Ride(
-        rider_id=current_user.id,   # ✅ FIXED
-        fare_estimate=data.fare_estimate,
+        rider_id=current_user.id,
         driver_id=driver.id,
-        status="assigned"
+        fare_estimate=data.fare_estimate,
+        status=RideStatus.assigned
     )
 
     driver.is_available = False
@@ -55,16 +71,46 @@ def request_ride(
     db.refresh(ride)
 
     return {
-        "ride_id": str(ride.id),
-        "status": ride.status,
+        "id": str(ride.id),
+        "status": ride.status.value,
         "driver_assigned": driver.name
     }
 
 
-# ---------------- 🚕 Accept Ride (DRIVER ONLY) ----------------
+# =====================================================
+# 🚗 GET AVAILABLE RIDES (FOR DRIVERS)
+# =====================================================
+@router.get("/available")
+def get_available_rides(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+
+    if current_user.role != "driver":
+        raise HTTPException(status_code=403, detail="Only drivers can view rides")
+
+    rides = db.query(Ride).filter(
+        Ride.status == RideStatus.assigned
+    ).all()
+
+    return [
+        {
+            "id": str(ride.id),
+            "rider_id": ride.rider_id,
+            "fare_estimate": ride.fare_estimate,
+            "status": ride.status.value,
+            "created_at": ride.created_at
+        }
+        for ride in rides
+    ]
+
+
+# =====================================================
+# 🚕 ACCEPT RIDE
+# =====================================================
 @router.post("/accept/{ride_id}")
 def accept_ride(
-    ride_id: UUID,
+    ride_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -72,42 +118,33 @@ def accept_ride(
     if current_user.role != "driver":
         raise HTTPException(status_code=403, detail="Only drivers can accept rides")
 
-    # ✅ Prevent driver from accepting multiple rides
-    existing_ride = db.query(Ride).filter(
-        Ride.driver_id == current_user.id,
-        Ride.status == "ongoing"
-    ).first()
-
-    if existing_ride:
-        raise HTTPException(
-            status_code=400,
-            detail="You already have an active ride"
-        )
-
     ride = db.query(Ride).filter(Ride.id == ride_id).first()
 
     if not ride:
         raise HTTPException(status_code=404, detail="Ride not found")
 
-    if ride.status != "assigned":
-        raise HTTPException(status_code=400, detail="Ride cannot be accepted")
+    if ride.status != RideStatus.assigned:
+        raise HTTPException(status_code=400, detail="Ride already taken")
 
-    ride.status = "ongoing"
+    ride.driver_id = current_user.id
+    ride.status = RideStatus.ongoing
 
     db.commit()
     db.refresh(ride)
 
     return {
         "message": "Ride accepted",
-        "ride_id": str(ride.id),
-        "status": ride.status
+        "id": str(ride.id),
+        "status": ride.status.value
     }
 
 
-# ---------------- ✅ Complete Ride (DRIVER ONLY) ----------------
+# =====================================================
+# ✅ COMPLETE RIDE
+# =====================================================
 @router.post("/complete/{ride_id}")
 def complete_ride(
-    ride_id: UUID,
+    ride_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -120,13 +157,16 @@ def complete_ride(
     if not ride:
         raise HTTPException(status_code=404, detail="Ride not found")
 
-    if ride.status != "ongoing":
-        raise HTTPException(status_code=400, detail="Ride cannot be completed")
+    if ride.driver_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You can only complete your ride")
 
-    ride.status = "completed"
-    ride.completed_at = datetime.utcnow()   # ✅ Timestamp added
+    ride.status = RideStatus.completed
+    ride.completed_at = datetime.utcnow()
 
-    driver = db.query(Driver).filter(Driver.id == ride.driver_id).first()
+    driver = db.query(Driver).filter(
+        Driver.name == current_user.username
+    ).first()
+
     if driver:
         driver.is_available = True
 
@@ -135,66 +175,15 @@ def complete_ride(
 
     return {
         "message": "Ride completed",
-        "ride_id": str(ride.id),
-        "status": ride.status,
+        "id": str(ride.id),
+        "status": ride.status.value,
         "completed_at": ride.completed_at
     }
 
 
-# ---------------- ❌ Cancel Ride ----------------
-@router.put("/cancel/{ride_id}")
-def cancel_ride(
-    ride_id: UUID,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-
-    ride = db.query(Ride).filter(Ride.id == ride_id).first()
-
-    if not ride:
-        raise HTTPException(status_code=404, detail="Ride not found")
-
-    if ride.status == "completed":
-        raise HTTPException(status_code=400, detail="Cannot cancel completed ride")
-
-    ride.status = "cancelled"
-
-    driver = db.query(Driver).filter(Driver.id == ride.driver_id).first()
-    if driver:
-        driver.is_available = True
-
-    db.commit()
-
-    return {"message": "Ride cancelled successfully"}
-
-
-# ---------------- 🚘 Driver Current Ride ----------------
-@router.get("/driver/current")
-def get_current_driver_ride(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-
-    if current_user.role != "driver":
-        raise HTTPException(status_code=403, detail="Only drivers can view this")
-
-    ride = db.query(Ride).filter(
-        Ride.driver_id == current_user.id,
-        Ride.status == "ongoing"
-    ).first()
-
-    if not ride:
-        return {"message": "No active ride"}
-
-    return {
-        "ride_id": str(ride.id),
-        "rider_id": ride.rider_id,
-        "status": ride.status,
-        "fare_estimate": ride.fare_estimate,
-        "created_at": ride.created_at
-    }
-
-# ---------------- 📜 Get My Rides ----------------
+# =====================================================
+# 📜 GET MY RIDES
+# =====================================================
 @router.get("/my-rides")
 def get_my_rides(
     db: Session = Depends(get_db),
@@ -205,20 +194,15 @@ def get_my_rides(
         rides = db.query(Ride).filter(
             Ride.rider_id == current_user.id
         ).all()
-
-    elif current_user.role == "driver":
+    else:
         rides = db.query(Ride).filter(
             Ride.driver_id == current_user.id
         ).all()
 
-    else:
-        rides = []
-
     return [
         {
-            "ride_id": str(ride.id),
-            "rider_id": ride.rider_id,
-            "status": ride.status,
+            "id": str(ride.id),
+            "status": ride.status.value,
             "fare_estimate": ride.fare_estimate,
             "driver_id": ride.driver_id,
             "created_at": ride.created_at,
@@ -226,3 +210,31 @@ def get_my_rides(
         }
         for ride in rides
     ]
+
+
+# =====================================================
+# 💰 DRIVER EARNINGS
+# =====================================================
+@router.get("/driver/earnings")
+def driver_earnings(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+
+    if current_user.role != "driver":
+        raise HTTPException(status_code=403)
+
+    total_completed = db.query(func.count(Ride.id)).filter(
+        Ride.driver_id == current_user.id,
+        Ride.status == RideStatus.completed
+    ).scalar()
+
+    total_earnings = db.query(func.sum(Ride.fare_estimate)).filter(
+        Ride.driver_id == current_user.id,
+        Ride.status == RideStatus.completed
+    ).scalar() or 0
+
+    return {
+        "total_completed_rides": total_completed,
+        "total_earnings": total_earnings
+    }

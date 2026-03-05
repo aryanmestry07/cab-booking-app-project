@@ -4,13 +4,15 @@ from pydantic import BaseModel
 import uuid
 
 from app.database import SessionLocal
-from app.models import User
+from app.models import User, Driver
 from app.auth import hash_password, verify_password, create_access_token
 
 router = APIRouter()
 
 
-# ---------------- DB Dependency ----------------
+# ===============================
+# 🗄 DB Dependency
+# ===============================
 def get_db():
     db = SessionLocal()
     try:
@@ -19,11 +21,13 @@ def get_db():
         db.close()
 
 
-# ---------------- Schemas ----------------
+# ===============================
+# 📦 Schemas
+# ===============================
 class RegisterSchema(BaseModel):
     username: str
     password: str
-    role: str  # rider or driver
+    role: str  # rider | driver | admin
 
 
 class LoginSchema(BaseModel):
@@ -31,14 +35,16 @@ class LoginSchema(BaseModel):
     password: str
 
 
-# ---------------- Register ----------------
+# ===============================
+# 📝 Register
+# ===============================
 @router.post("/register")
 def register(data: RegisterSchema, db: Session = Depends(get_db)):
 
-    if data.role not in ["rider", "driver"]:
+    if data.role not in ["rider", "driver", "admin"]:
         raise HTTPException(
-            status_code=400,
-            detail="Role must be 'rider' or 'driver'"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Role must be 'rider', 'driver', or 'admin'"
         )
 
     existing_user = db.query(User).filter(
@@ -47,7 +53,7 @@ def register(data: RegisterSchema, db: Session = Depends(get_db)):
 
     if existing_user:
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="User already exists"
         )
 
@@ -62,10 +68,23 @@ def register(data: RegisterSchema, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
 
-    return {"message": "User registered successfully"}
+    # 🚗 CREATE DRIVER PROFILE AUTOMATICALLY
+    if data.role == "driver":
+        driver = Driver(
+            name=new_user.username,
+            is_available=True
+        )
 
+        db.add(driver)
+        db.commit()
 
-# ---------------- Login (JSON Version) ----------------
+    return {
+        "message": "User registered successfully"
+    }
+
+# ===============================
+# 🔐 Login
+# ===============================
 @router.post("/login")
 def login(data: LoginSchema, db: Session = Depends(get_db)):
 
@@ -86,7 +105,10 @@ def login(data: LoginSchema, db: Session = Depends(get_db)):
         )
 
     access_token = create_access_token(
-        {"sub": user.username, "role": user.role}
+        {
+            "sub": user.username,
+            "role": user.role
+        }
     )
 
     return {
