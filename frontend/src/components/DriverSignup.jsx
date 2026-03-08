@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "../utils/api";
+import api from "../api/axios";
+import toast from "react-hot-toast";
 
-export default function Signup() {
+export default function DriverSignup() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -14,12 +15,17 @@ export default function Signup() {
     e.preventDefault();
 
     if (!username || !password || !confirmPassword) {
-      alert("Please fill in all required fields.");
+      toast.error("Please fill in all required fields");
+      return;
+    }
+
+    if (password.length < 6) {
+      toast.error("Password must be at least 6 characters");
       return;
     }
 
     if (password !== confirmPassword) {
-      alert("Passwords do not match.");
+      toast.error("Passwords do not match");
       return;
     }
 
@@ -28,13 +34,13 @@ export default function Signup() {
       await api.post("/auth/register", {
         username,
         password,
-        role: "rider",
+        role: "driver"
       });
 
-      alert("Account created successfully 🎉");
-      navigate("/");
-    } catch (err) {
-      alert(err.response?.data?.detail || "Signup failed");
+      toast.success("Driver account created successfully 🚗");
+      navigate("/driver-login");
+    } catch {
+      toast.error("Registration failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -43,7 +49,7 @@ export default function Signup() {
   return (
     <div className="min-h-screen flex bg-white text-[#1a1a1a] antialiased">
       
-      {/* Updated Left Branding: Perfectly Matched to Login */}
+      {/* Updated Left Branding: Perfectly Matched to Suite */}
       <div className="hidden lg:flex w-1/2 bg-black items-center justify-center p-12">
         <div className="max-w-md">
           {/* Large C Logo */}
@@ -52,11 +58,11 @@ export default function Signup() {
           </div>
 
           <h2 className="text-5xl font-medium text-white tracking-tight leading-tight">
-            Start your journey <br /> with CabGo.
+            The road is yours. <br /> Start driving today.
           </h2>
 
           <p className="text-gray-400 mt-6 text-lg font-light">
-            Create a rider account and book rides instantly.
+            Join CabGo as a driver partner and start earning on your schedule.
           </p>
         </div>
       </div>
@@ -66,17 +72,17 @@ export default function Signup() {
         <div className="w-full max-w-[400px]">
           
           {/* Mobile Logo */}
-          <div className="lg:hidden mb-12">
+          <div className="lg:hidden mb-12 text-left">
             <div className="w-12 h-12 bg-black flex items-center justify-center rounded-lg shadow-sm">
               <span className="text-white text-2xl font-black">C</span>
             </div>
           </div>
 
           {/* Header */}
-          <header className="mb-10">
-            <h1 className="text-3xl font-medium tracking-tight">Create account</h1>
+          <header className="mb-10 text-left">
+            <h1 className="text-3xl font-medium tracking-tight">Partner Sign up</h1>
             <p className="text-sm text-gray-500 mt-2">
-              Sign up to start booking rides instantly.
+              Create your account to start accepting rides.
             </p>
           </header>
 
@@ -84,11 +90,11 @@ export default function Signup() {
           <form onSubmit={handleSignup} className="space-y-6">
             <div>
               <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">
-                Username
+                Driver Username
               </label>
               <input
                 type="text"
-                placeholder="Enter username"
+                placeholder="Choose a username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full px-4 py-4 bg-[#f6f6f6] border border-transparent focus:border-black focus:bg-white transition-all text-sm outline-none font-medium"
@@ -129,16 +135,16 @@ export default function Signup() {
               disabled={loading}
               className="w-full bg-black text-white py-4 font-bold text-sm tracking-widest hover:bg-[#222] transition disabled:bg-gray-300 uppercase mt-4"
             >
-              {loading ? "Creating account..." : "Create Account"}
+              {loading ? "Registering..." : "Create Partner Account"}
             </button>
           </form>
 
           {/* Footer Links */}
-          <div className="mt-12 pt-8 border-t border-gray-100 space-y-4">
+          <div className="mt-12 pt-8 border-t border-gray-100 flex flex-col gap-4">
             <p className="text-xs text-gray-500">
-              Already have an account?{" "}
+              Already a driver partner?{" "}
               <button
-                onClick={() => navigate("/")}
+                onClick={() => navigate("/driver-login")}
                 className="text-black font-bold hover:underline ml-1"
               >
                 Log in
@@ -146,12 +152,12 @@ export default function Signup() {
             </p>
 
             <p className="text-xs text-gray-500">
-              Want to earn money?{" "}
+              Just need a ride?{" "}
               <button
-                onClick={() => navigate("/driver-signup")}
+                onClick={() => navigate("/signup")}
                 className="text-black font-bold hover:underline ml-1"
               >
-                Become a driver
+                Rider Signup
               </button>
             </p>
           </div>

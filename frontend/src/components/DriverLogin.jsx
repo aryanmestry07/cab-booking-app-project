@@ -1,40 +1,41 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../utils/api";
+import { saveToken } from "../utils/auth";
 
-export default function Signup() {
+export default function DriverLogin() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   const navigate = useNavigate();
 
-  const handleSignup = async (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-
-    if (!username || !password || !confirmPassword) {
-      alert("Please fill in all required fields.");
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      alert("Passwords do not match.");
+    if (!username || !password) {
+      alert("Please enter your driver credentials.");
       return;
     }
 
     try {
       setLoading(true);
-      await api.post("/auth/register", {
+      const res = await api.post("/auth/login", {
         username,
-        password,
-        role: "rider",
+        password
       });
 
-      alert("Account created successfully 🎉");
-      navigate("/");
+      if (res.data.role !== "driver") {
+        alert("Access denied. This portal is only for drivers.");
+        return;
+      }
+
+      saveToken(res.data.access_token);
+      localStorage.setItem("role", res.data.role);
+      localStorage.setItem("user_id", res.data.user_id);
+
+      navigate("/driver");
     } catch (err) {
-      alert(err.response?.data?.detail || "Signup failed");
+      alert(err.response?.data?.detail || "Authentication failed.");
     } finally {
       setLoading(false);
     }
@@ -43,7 +44,7 @@ export default function Signup() {
   return (
     <div className="min-h-screen flex bg-white text-[#1a1a1a] antialiased">
       
-      {/* Updated Left Branding: Perfectly Matched to Login */}
+      {/* Updated Left Branding: Perfectly Matched to Platform Suite */}
       <div className="hidden lg:flex w-1/2 bg-black items-center justify-center p-12">
         <div className="max-w-md">
           {/* Large C Logo */}
@@ -52,20 +53,20 @@ export default function Signup() {
           </div>
 
           <h2 className="text-5xl font-medium text-white tracking-tight leading-tight">
-            Start your journey <br /> with CabGo.
+            Drive when you want, <br /> earn on your schedule.
           </h2>
 
           <p className="text-gray-400 mt-6 text-lg font-light">
-            Create a rider account and book rides instantly.
+            Sign in to your driver partner dashboard to start accepting rides.
           </p>
         </div>
       </div>
 
-      {/* Right Signup Section */}
+      {/* Right Login Section */}
       <div className="flex-1 flex flex-col justify-center items-center px-6 py-12 lg:px-24">
         <div className="w-full max-w-[400px]">
           
-          {/* Mobile Logo */}
+          {/* Mobile Logo Only */}
           <div className="lg:hidden mb-12">
             <div className="w-12 h-12 bg-black flex items-center justify-center rounded-lg shadow-sm">
               <span className="text-white text-2xl font-black">C</span>
@@ -73,22 +74,22 @@ export default function Signup() {
           </div>
 
           {/* Header */}
-          <header className="mb-10">
-            <h1 className="text-3xl font-medium tracking-tight">Create account</h1>
+          <header className="mb-10 text-left">
+            <h1 className="text-3xl font-medium tracking-tight">Driver Login</h1>
             <p className="text-sm text-gray-500 mt-2">
-              Sign up to start booking rides instantly.
+              Welcome back. Go online and start earning.
             </p>
           </header>
 
           {/* Form */}
-          <form onSubmit={handleSignup} className="space-y-6">
+          <form onSubmit={handleLogin} className="space-y-6">
             <div>
               <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">
-                Username
+                Driver Username
               </label>
               <input
                 type="text"
-                placeholder="Enter username"
+                placeholder="Username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full px-4 py-4 bg-[#f6f6f6] border border-transparent focus:border-black focus:bg-white transition-all text-sm outline-none font-medium"
@@ -102,23 +103,9 @@ export default function Signup() {
               </label>
               <input
                 type="password"
-                placeholder="Create password"
+                placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-4 bg-[#f6f6f6] border border-transparent focus:border-black focus:bg-white transition-all text-sm outline-none font-medium"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">
-                Confirm Password
-              </label>
-              <input
-                type="password"
-                placeholder="Confirm password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
                 className="w-full px-4 py-4 bg-[#f6f6f6] border border-transparent focus:border-black focus:bg-white transition-all text-sm outline-none font-medium"
                 required
               />
@@ -127,32 +114,25 @@ export default function Signup() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-black text-white py-4 font-bold text-sm tracking-widest hover:bg-[#222] transition disabled:bg-gray-300 uppercase mt-4"
+              className="w-full bg-black text-white py-4 font-bold text-sm tracking-widest hover:bg-[#222] transition disabled:bg-gray-300 mt-4 uppercase"
             >
-              {loading ? "Creating account..." : "Create Account"}
+              {loading ? "Verifying..." : "Go Online"}
             </button>
           </form>
 
-          {/* Footer Links */}
-          <div className="mt-12 pt-8 border-t border-gray-100 space-y-4">
+          {/* Footer */}
+          <div className="mt-12 pt-8 border-t border-gray-100 flex flex-col gap-4">
             <p className="text-xs text-gray-500">
-              Already have an account?{" "}
+              Are you a rider?{" "}
               <button
                 onClick={() => navigate("/")}
                 className="text-black font-bold hover:underline ml-1"
               >
-                Log in
+                Rider Login
               </button>
             </p>
-
-            <p className="text-xs text-gray-500">
-              Want to earn money?{" "}
-              <button
-                onClick={() => navigate("/driver-signup")}
-                className="text-black font-bold hover:underline ml-1"
-              >
-                Become a driver
-              </button>
+            <p className="text-xs text-gray-400 leading-relaxed">
+              Driver partner portal. Keep your credentials secure.
             </p>
           </div>
 

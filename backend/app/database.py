@@ -12,3 +12,11 @@ SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
 print("✅ Using SQLite local database")
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+        

@@ -11,7 +11,7 @@ router = APIRouter()
 
 
 # ===============================
-# 🗄 DB Dependency
+# DB Dependency
 # ===============================
 def get_db():
     db = SessionLocal()
@@ -22,7 +22,7 @@ def get_db():
 
 
 # ===============================
-# 📦 Schemas
+# Schemas
 # ===============================
 class RegisterSchema(BaseModel):
     username: str
@@ -36,7 +36,7 @@ class LoginSchema(BaseModel):
 
 
 # ===============================
-# 📝 Register
+# Register
 # ===============================
 @router.post("/register")
 def register(data: RegisterSchema, db: Session = Depends(get_db)):
@@ -68,11 +68,14 @@ def register(data: RegisterSchema, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
 
-    # 🚗 CREATE DRIVER PROFILE AUTOMATICALLY
+    # 🚗 Create driver profile automatically
     if data.role == "driver":
         driver = Driver(
+            user_id=new_user.id,
             name=new_user.username,
-            is_available=True
+            is_available=True,
+            lat=None,
+            lon=None
         )
 
         db.add(driver)
@@ -82,8 +85,9 @@ def register(data: RegisterSchema, db: Session = Depends(get_db)):
         "message": "User registered successfully"
     }
 
+
 # ===============================
-# 🔐 Login
+# Login
 # ===============================
 @router.post("/login")
 def login(data: LoginSchema, db: Session = Depends(get_db)):
@@ -114,5 +118,6 @@ def login(data: LoginSchema, db: Session = Depends(get_db)):
     return {
         "access_token": access_token,
         "token_type": "bearer",
-        "role": user.role
+        "role": user.role,
+        "user_id": user.id
     }

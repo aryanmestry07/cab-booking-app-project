@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Float, Boolean, ForeignKey, DateTime, Enum, Index
+from sqlalchemy import Column, String, Float, Boolean, ForeignKey, DateTime, Enum, Index, Integer
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import uuid
@@ -25,7 +25,20 @@ class User(Base):
     password = Column(String, nullable=False)
     role = Column(String, nullable=False)
 
-    rides = relationship("Ride", back_populates="rider")
+    # Rider rides
+    rides = relationship(
+        "Ride",
+        back_populates="rider",
+        cascade="all, delete"
+    )
+
+    # Driver profile
+    driver_profile = relationship(
+        "Driver",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete"
+    )
 
 
 # ---------------- 🚗 Driver Model ----------------
@@ -37,12 +50,21 @@ class Driver(Base):
     user_id = Column(String, ForeignKey("users.id"), unique=True, index=True)
 
     name = Column(String, nullable=False)
+
     is_available = Column(Boolean, default=True, index=True)
 
-    lat = Column(Float)
-    lon = Column(Float)
+    # 📍 Driver GPS location
+    lat = Column(Float, nullable=True)
+    lon = Column(Float, nullable=True)
 
-    rides = relationship("Ride", back_populates="driver")
+    user = relationship("User", back_populates="driver_profile")
+
+    rides = relationship(
+        "Ride",
+        back_populates="driver",
+        cascade="all, delete"
+    )
+
 
 # ---------------- 🚖 Ride Model ----------------
 class Ride(Base):
@@ -51,17 +73,59 @@ class Ride(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
 
     rider_id = Column(String, ForeignKey("users.id"), index=True)
+
     driver_id = Column(String, ForeignKey("drivers.id"), nullable=True, index=True)
 
-    status = Column(Enum(RideStatus), default=RideStatus.requested, index=True)
+    status = Column(
+        Enum(RideStatus),
+        default=RideStatus.requested,
+        index=True
+    )
+
+    # 📍 Pickup Location
+    pickup_lat = Column(Float, nullable=False)
+    pickup_lng = Column(Float, nullable=False)
+
+    # 📍 Destination Location
+    dest_lat = Column(Float, nullable=False)
+    dest_lng = Column(Float, nullable=False)
+
+    # 📏 Distance (KM)
+    distance = Column(Float, nullable=False)
+
+    # 💰 Fare Estimate
     fare_estimate = Column(Float, nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
     completed_at = Column(DateTime, nullable=True)
 
+    payment_status = Column(String, default="pending")
+
+    # Relationships
     rider = relationship("User", back_populates="rides")
+
     driver = relationship("Driver", back_populates="rides")
 
 
-# ---------------- 📈 Composite Index (Performance) ----------------
+# ---------------- 📈 Performance Index ----------------
 Index("idx_ride_status_driver", Ride.status, Ride.driver_id)
+
+
+# ---------------- ⭐ Rating Model ----------------
+class Rating(Base):
+    __tablename__ = "ratings"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    ride_id = Column(String, ForeignKey("rides.id"))
+
+    rider_id = Column(String, ForeignKey("users.id"))
+
+    driver_id = Column(String, ForeignKey("users.id"))
+
+    rating = Column(Integer)
+
+    comment = Column(String, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)

@@ -1,50 +1,62 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 
+/* Leaflet CSS (Required for maps) */
+import "leaflet/dist/leaflet.css";
+import "leaflet-routing-machine/dist/leaflet-routing-machine.css";
+import "leaflet-defaulticon-compatibility";
+import "leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.css";
+
 import Login from "./components/Login";
 import Signup from "./components/Signup";
+import DriverLogin from "./components/DriverLogin";
+import DriverSignup from "./components/DriverSignup";
+
 import RiderDashboard from "./components/RiderDashboard";
 import DriverDashboard from "./components/DriverDashboard";
+
+import RiderHistory from "./components/RiderHistory";
+import DriverHistory from "./components/DriverHistory";
+
 import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
   return (
     <Router>
-      {/* Updated the main wrapper to bg-white to match the Uber/Ola aesthetic.
-          Using selection:bg-black/10 for a subtle, high-end interaction feel.
-      */}
       <div className="min-h-screen bg-white selection:bg-black/10 text-slate-900">
-        
-        {/* Light Theme Toaster:
-            Standardizing notifications with white backgrounds and sharp borders 
-            to match the professional light UI.
-        */}
-        <Toaster 
-          position="top-right" 
+
+        {/* Toast Notifications */}
+        <Toaster
+          position="top-right"
           toastOptions={{
             style: {
-              background: '#ffffff', 
-              color: '#000000',
-              border: '1px solid #e5e7eb', // gray-200
-              borderRadius: '12px',
-              fontSize: '14px',
-              fontWeight: '500',
+              background: "#ffffff",
+              color: "#000000",
+              border: "1px solid #e5e7eb",
+              borderRadius: "12px",
+              fontSize: "14px",
+              fontWeight: "500",
             },
             success: {
               iconTheme: {
-                primary: '#000000', // Black icon for a minimalist look
-                secondary: '#ffffff',
+                primary: "#000000",
+                secondary: "#ffffff",
               },
             },
           }}
         />
 
         <Routes>
+
           {/* Public Routes */}
           <Route path="/" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
 
-          {/* Protected Rider Routes */}
+          {/* Driver Auth */}
+          <Route path="/driver-login" element={<DriverLogin />} />
+          <Route path="/driver-signup" element={<DriverSignup />} />
+
+          {/* Rider Dashboard */}
           <Route
             path="/rider"
             element={
@@ -54,7 +66,17 @@ function App() {
             }
           />
 
-          {/* Protected Driver Routes */}
+          {/* Rider History */}
+          <Route
+            path="/rider/history"
+            element={
+              <ProtectedRoute role="rider">
+                <RiderHistory />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Driver Dashboard */}
           <Route
             path="/driver"
             element={
@@ -64,9 +86,21 @@ function App() {
             }
           />
 
-          {/* 404 Redirect / Fallback */}
+          {/* Driver History */}
+          <Route
+            path="/driver/history"
+            element={
+              <ProtectedRoute role="driver">
+                <DriverHistory />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Fallback */}
           <Route path="*" element={<Login />} />
+
         </Routes>
+
       </div>
     </Router>
   );

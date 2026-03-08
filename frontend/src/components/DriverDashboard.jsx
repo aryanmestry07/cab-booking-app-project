@@ -5,206 +5,328 @@ import StatusBadge from "../components/StatusBadge";
 import toast from "react-hot-toast";
 
 function DriverDashboard() {
+
   const [rides, setRides] = useState([]);
   const [loading, setLoading] = useState(false);
+  const role = localStorage.getItem("role");
 
-  // Fetch rides (available + my rides)
+  // ---------------- Fetch Rides ----------------
   const fetchAvailableRides = useCallback(async () => {
+
+    if (role !== "driver") return;
+
     try {
 
-      const availableRes = await api.get("/rides/available");
-      const myRidesRes = await api.get("/rides/my-rides");
+      let available = [];
+      let mine = [];
 
-      const allRides = [
-        ...availableRes.data,
-        ...myRidesRes.data
-      ];
+      try {
+        const res = await api.get("/rides/available");
+        available = res.data || [];
+      } catch (err) {
+        console.warn("Available rides fetch failed:", err);
+      }
 
-      setRides(allRides);
+      try {
+        const res = await api.get("/rides/my-rides");
+        mine = res.data || [];
+      } catch (err) {
+        console.warn("My rides fetch failed:", err);
+      }
+
+      const combined = [...available, ...mine];
+
+      const unique = Array.from(
+        new Map(combined.map((r) => [r.id, r])).values()
+      );
+
+      setRides(unique);
 
     } catch (err) {
-      const msg =
-        err.response?.data?.detail || "Could not refresh ride list";
-
-      toast.error(msg);
       console.error("Fetch Error:", err);
     }
-  }, []);
+
+  }, [role]);
+
 
   useEffect(() => {
+
+    if (role !== "driver") return;
+
     fetchAvailableRides();
 
-    const interval = setInterval(fetchAvailableRides, 10000);
-    return () => clearInterval(interval);
-  }, [fetchAvailableRides]);
+    const interval = setInterval(fetchAvailableRides, 5000);
 
-  // Accept / Complete Ride
+    return () => clearInterval(interval);
+
+  }, [fetchAvailableRides, role]);
+
+
+  // ---------------- Driver Location ----------------
+  useEffect(() => {
+
+    if (role !== "driver") return;
+
+    const sendLocation = () => {
+
+      if (!navigator.geolocation) return;
+
+      navigator.geolocation.getCurrentPosition(async (pos) => {
+
+        try {
+
+          await api.post("/drivers/location", {
+            lat: pos.coords.latitude,
+            lon: pos.coords.longitude
+          });
+
+        } catch (err) {
+          console.error("Location update failed:", err.response?.data || err);
+        }
+
+      });
+
+    };
+
+    sendLocation();
+
+    const interval = setInterval(sendLocation, 5000);
+
+    return () => clearInterval(interval);
+
+  }, [role]);
+
+
+  // ---------------- Ride Actions ----------------
   const handleAction = async (rideId, action) => {
+
     setLoading(true);
 
     try {
 
       await api.post(`/rides/${action}/${rideId}`);
 
-      const successMsg =
+      toast.success(
         action === "accept"
-          ? "Ride Accepted! Navigate to pickup."
-          : "Ride Completed! Fare added.";
-
-      toast.success(successMsg);
+          ? "Trip Started"
+          : "Trip Completed"
+      );
 
       fetchAvailableRides();
 
     } catch (err) {
 
-      const errorMessage =
+      toast.error(
         err.response?.data?.detail ||
-        err.response?.data?.message ||
-        `Failed to ${action} ride`;
-
-      toast.error(errorMessage);
+        `Failed to ${action} ride`
+      );
 
     } finally {
       setLoading(false);
     }
+
   };
 
-  // Ride filters
-  const availableRides = rides.filter((r) => r.status === "assigned");
-  const activeRides = rides.filter((r) => r.status === "ongoing");
-  const completedRides = rides.filter((r) => r.status === "completed");
 
-  const totalEarnings = completedRides.reduce(
-    (sum, ride) => sum + (ride.fare_estimate || 0),
-    0
-  );
+  // ---------------- Ride Filters ----------------
+  const availableRides = rides.filter((r) => r.status === "requested");
+  const activeRides = rides.filter((r) => r.status === "ongoing");
+
 
   return (
-    <div className="flex bg-gray-950 min-h-screen text-slate-200">
+
+    <div className="flex h-screen bg-[#0a0a0a] text-white antialiased overflow-hidden">
+
       <Sidebar role="driver" />
 
-      <div className="ml-64 w-full p-8 relative">
+      <main className="flex-1 ml-64 overflow-y-auto relative">
 
         {loading && (
-          <div className="absolute inset-0 bg-gray-950/40 backdrop-blur-[2px] z-50 flex items-center justify-center">
-            <div className="bg-blue-600 text-white px-6 py-3 rounded-full font-bold shadow-xl animate-bounce">
-              Processing Request...
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center">
+            <div className="flex flex-col items-center">
+              <div className="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin mb-4"></div>
+              <p className="text-xs font-bold uppercase tracking-[0.3em]">
+                Updating Trip...
+              </p>
             </div>
           </div>
         )}
 
-        <header className="mb-10 flex justify-between items-end">
-          <div>
-            <h2 className="text-4xl font-extrabold text-white">
-              Driver Console
-            </h2>
-            <p className="text-slate-400">
-              View available rides and track your progress
-            </p>
-          </div>
+        <div className="p-12 max-w-6xl mx-auto">
 
-          <div className="bg-gray-900 border border-gray-800 p-4 rounded-2xl text-right min-w-[180px]">
-            <p className="text-xs text-gray-500 uppercase font-bold tracking-widest">
-              Today's Earnings
-            </p>
-            <p className="text-3xl font-black text-emerald-400">
-              ₹{totalEarnings}
-            </p>
-          </div>
-        </header>
+          {/* Header */}
+          <header className="flex justify-between items-end mb-12">
 
-        <div className="space-y-10">
+            <div>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-500">
+                  System Live
+                </span>
+              </div>
 
-          {/* Active Ride */}
-          {activeRides.length > 0 && (
-            <section>
-              <h3 className="text-xl font-semibold mb-4 text-blue-400 flex items-center gap-2">
-                <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
-                Ongoing Trip
-              </h3>
-
-              {activeRides.map((ride) => (
-                <div
-                  key={ride.id}
-                  className="bg-gray-900 border-2 border-blue-500/30 p-6 rounded-2xl flex justify-between items-center"
-                >
-                  <div>
-                    <p className="text-xl font-bold text-white">
-                      Rider ID: {ride.rider_id}
-                    </p>
-
-                    <StatusBadge status={ride.status} />
-                  </div>
-
-                  <button
-                    disabled={loading}
-                    onClick={() => handleAction(ride.id, "complete")}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-3 rounded-xl font-bold"
-                  >
-                    Complete Ride
-                  </button>
-                </div>
-              ))}
-            </section>
-          )}
-
-          {/* Available Rides */}
-          <section>
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-semibold text-white">
-                Available Requests
-              </h3>
-
-              <button
-                onClick={fetchAvailableRides}
-                className="text-xs text-blue-500 hover:underline font-bold"
-              >
-                REFRESH
-              </button>
+              <h1 className="text-5xl font-medium tracking-tighter">
+                Driver Partner
+              </h1>
             </div>
 
-            {availableRides.length === 0 ? (
-              <div className="bg-gray-900/50 border border-dashed border-gray-800 p-16 rounded-2xl text-center">
-                <p className="text-gray-500 text-lg">
-                  Searching for nearby riders...
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <button
+              onClick={fetchAvailableRides}
+              className="px-6 py-2 border border-white/10 text-[10px] font-bold uppercase tracking-widest hover:bg-white hover:text-black transition-all"
+            >
+              Sync Dashboard
+            </button>
 
-                {availableRides.map((ride) => (
+          </header>
+
+          <div className="grid grid-cols-1 gap-12">
+
+            {/* ACTIVE TRIP */}
+            <section>
+
+              <h2 className="text-[11px] font-bold uppercase tracking-[0.3em] text-gray-500 mb-6 flex items-center gap-4">
+                Active Assignment
+                <div className="flex-1 h-px bg-white/5"></div>
+              </h2>
+
+              {activeRides.length > 0 ? (
+
+                activeRides.map((ride) => (
+
                   <div
                     key={ride.id}
-                    className="bg-gray-900 border border-gray-800 p-6 rounded-2xl"
+                    className="bg-white text-black p-10 flex flex-col md:flex-row justify-between items-center"
                   >
 
-                    <p className="text-white font-semibold text-lg">
-                      Rider ID: {ride.rider_id}
-                    </p>
+                    <div className="mb-6 md:mb-0">
 
-                    <p className="text-emerald-400 font-bold text-xl mt-2">
-                      ₹{ride.fare_estimate}
-                    </p>
+                      <div className="flex items-center gap-4 mb-2">
+                        <StatusBadge status={ride.status} />
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                          ID: {ride.id.slice(-6)}
+                        </span>
+                      </div>
 
-                    <button
-                      disabled={loading}
-                      onClick={() => handleAction(ride.id, "accept")}
-                      className="w-full bg-white text-black font-bold py-3 rounded-xl mt-4 hover:bg-blue-500 hover:text-white"
-                    >
-                      ACCEPT REQUEST
-                    </button>
+                      <h3 className="text-3xl font-medium tracking-tight mb-2">
+                        Rider: {ride.rider_name || "Guest"}
+                      </h3>
+
+                      <p className="text-lg text-gray-600 italic">
+                        Distance: {ride.distance?.toFixed(2)} km
+                      </p>
+
+                    </div>
+
+                    <div className="text-center md:text-right flex flex-col items-center md:items-end gap-6">
+
+                      <p className="text-5xl font-medium tracking-tighter">
+                        ₹{ride.fare_estimate}
+                      </p>
+
+                      <button
+                        onClick={() => handleAction(ride.id, "complete")}
+                        className="bg-black text-white px-12 py-4 font-bold text-sm tracking-widest uppercase hover:bg-gray-800 transition-all"
+                      >
+                        Complete Trip
+                      </button>
+
+                    </div>
 
                   </div>
-                ))}
 
-              </div>
-            )}
-          </section>
+                ))
+
+              ) : (
+
+                <div className="border border-white/10 p-12 text-center text-gray-600 italic font-light">
+                  No active assignments.
+                </div>
+
+              )}
+
+            </section>
+
+
+            {/* AVAILABLE REQUESTS */}
+            <section>
+
+              <h2 className="text-[11px] font-bold uppercase tracking-[0.3em] text-gray-500 mb-6 flex items-center gap-4">
+                Available Requests
+                <div className="flex-1 h-px bg-white/5"></div>
+              </h2>
+
+              {availableRides.length === 0 ? (
+
+                <div className="bg-[#111] p-16 text-center border border-white/5">
+                  <p className="text-gray-500 text-sm tracking-widest font-medium uppercase">
+                    Scanning for nearby riders...
+                  </p>
+                </div>
+
+              ) : (
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                  {availableRides.map((ride) => (
+
+                    <div
+                      key={ride.id}
+                      className="bg-[#111] border border-white/5 p-8 hover:border-white/20 transition-all"
+                    >
+
+                      <div className="flex justify-between items-start mb-8">
+
+                        <div>
+                          <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">
+                            Incoming Request
+                          </p>
+
+                          <h4 className="text-xl font-medium tracking-tight text-white">
+                            {ride.rider_name || "Guest Rider"}
+                          </h4>
+                        </div>
+
+                        <p className="text-xs font-bold text-emerald-400 uppercase tracking-widest">
+                          {ride.distance?.toFixed(1)} km
+                        </p>
+
+                      </div>
+
+                      <div className="flex justify-between items-end">
+
+                        <p className="text-3xl font-medium tracking-tighter text-white">
+                          ₹{ride.fare_estimate}
+                        </p>
+
+                        <button
+                          onClick={() => handleAction(ride.id, "accept")}
+                          className="bg-white text-black px-6 py-3 font-bold text-[10px] tracking-widest uppercase hover:bg-emerald-500 hover:text-white transition-all"
+                        >
+                          Accept
+                        </button>
+
+                      </div>
+
+                    </div>
+
+                  ))}
+
+                </div>
+
+              )}
+
+            </section>
+
+          </div>
 
         </div>
-      </div>
+
+      </main>
+
     </div>
+
   );
+
 }
 
 export default DriverDashboard;
